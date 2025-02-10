@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Pulsating Blob Visualization</title>
+  <title>Smooth Pulsating Blob</title>
   <style>
     body { margin: 0; overflow: hidden; background-color: #000; }
   </style>
@@ -18,11 +18,11 @@
     animate();
 
     function init() {
-      // Create the scene and set a black background.
+      // Create the scene with a black background.
       scene = new THREE.Scene();
       scene.background = new THREE.Color(0x000000);
 
-      // Set up a perspective camera.
+      // Set up the perspective camera.
       camera = new THREE.PerspectiveCamera(
         75,
         window.innerWidth / window.innerHeight,
@@ -36,26 +36,28 @@
       renderer.setSize(window.innerWidth, window.innerHeight);
       document.body.appendChild(renderer.domElement);
 
-      // Create a smooth sphere geometry.
-      // Increasing the width and height segments makes the blob smoother.
-      geometry = new THREE.SphereBufferGeometry(3, 64, 64);
+      // Create a sphere geometry with fewer segments to reduce the number of wireframe lines.
+      // This still provides enough detail for a smooth pulsation.
+      geometry = new THREE.SphereBufferGeometry(3, 32, 32);
 
-      // Use a basic material in wireframe mode for a minimalist look.
+      // Use a translucent wireframe material for a softer look.
       const material = new THREE.MeshBasicMaterial({
         color: 0xffffff,
         wireframe: true,
+        transparent: true,
+        opacity: 0.5
       });
 
       // Create the mesh and add it to the scene.
       mesh = new THREE.Mesh(geometry, material);
       scene.add(mesh);
 
-      // Store the original positions of each vertex so we know the base shape.
+      // Store the original positions for each vertex.
       const positionAttribute = geometry.attributes.position;
       const vertexCount = positionAttribute.count;
-      basePositions = new Float32Array(positionAttribute.array); // deep copy
+      basePositions = new Float32Array(positionAttribute.array);
 
-      // For each vertex, assign a random phase and frequency to drive the pulsation.
+      // Assign a random phase and frequency to each vertex for individual pulsation.
       vertexPhases = new Float32Array(vertexCount);
       vertexFreqs = new Float32Array(vertexCount);
       for (let i = 0; i < vertexCount; i++) {
@@ -90,16 +92,15 @@
         const by = basePositions[ix + 1];
         const bz = basePositions[ix + 2];
 
-        // Calculate the original radius (distance from the center).
+        // Compute the original radius.
         const originalRadius = Math.sqrt(bx * bx + by * by + bz * bz);
 
-        // Compute a displacement based on a sine wave with a random phase and frequency.
-        const displacement = 0.5 * Math.sin(time * vertexFreqs[i] + vertexPhases[i]);
+        // Use a reduced amplitude (0.2 instead of 0.5) for a softer pulsation.
+        const displacement = 0.2 * Math.sin(time * vertexFreqs[i] + vertexPhases[i]);
 
-        // The new radius is the original radius plus the computed displacement.
         const newRadius = originalRadius + displacement;
 
-        // Normalize the original base position and scale it by the new radius.
+        // Scale the original base position to get the new position.
         const factor = newRadius / originalRadius;
         positions[ix]     = bx * factor;
         positions[ix + 1] = by * factor;
@@ -107,7 +108,7 @@
       }
       geometry.attributes.position.needsUpdate = true;
 
-      // Optionally, rotate the whole blob for an additional dynamic effect.
+      // Optionally, rotate the blob slowly for additional dynamism.
       mesh.rotation.y += 0.005;
 
       renderer.render(scene, camera);
