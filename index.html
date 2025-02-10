@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <title>Real-Time Earthquake Globe</title>
   <style>
-    body { margin: 0; overflow: hidden; background-color: #000; }
+    body { margin: 0; overflow: hidden; background-color: #111; }
   </style>
 </head>
 <body>
@@ -20,9 +20,9 @@
     fetchEarthquakeData(); // initial fetch
     // Update quake markers every 60 seconds (60000 ms)
     setInterval(fetchEarthquakeData, 60000);
-
+    
     function init() {
-      // Create the scene
+      // Create the scene.
       scene = new THREE.Scene();
       
       // Set up the perspective camera.
@@ -34,68 +34,68 @@
       );
       camera.position.set(0, 0, 10);
       
-      // Create the WebGL renderer.
+      // Create the renderer.
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
       renderer.setSize(window.innerWidth, window.innerHeight);
       document.body.appendChild(renderer.domElement);
       
-      // Add ambient and directional lights for nice illumination.
-      const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+      // Increase ambient and directional light intensities to brighten the scene.
+      const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
       scene.add(ambientLight);
       
-      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 1.2);
       directionalLight.position.set(5, 3, 5);
       scene.add(directionalLight);
       
-      // Load an abstract Earth texture that shows country boundaries & grid-lines.
-      // (This texture is an example – feel free to replace it with one you like.)
+      // Load an abstract Earth texture that shows country boundaries, meridians and parallels.
+      // (Feel free to replace this URL with one of your choosing.)
       const textureLoader = new THREE.TextureLoader();
       const earthTexture = textureLoader.load("https://upload.wikimedia.org/wikipedia/commons/thumb/8/80/World_map_-_low_resolution.svg/1200px-World_map_-_low_resolution.svg.png");
       
-      // Create Earth geometry and a slightly translucent material.
+      // Create the Earth geometry and a slightly translucent material.
       const earthGeometry = new THREE.SphereGeometry(EARTH_RADIUS, 64, 64);
       const earthMaterial = new THREE.MeshPhongMaterial({
         map: earthTexture,
         transparent: true,
-        opacity: 0.7
+        opacity: 0.8,
+        emissive: 0x222222,
+        emissiveIntensity: 0.5
       });
       earthMesh = new THREE.Mesh(earthGeometry, earthMaterial);
       scene.add(earthMesh);
       
-      // Create a group for quake markers and attach it to the Earth.
-      // This ensures markers stick to the surface as the Earth rotates.
+      // Create a group for quake markers and add it as a child of the Earth.
+      // This ensures that markers rotate with the Earth.
       quakeGroup = new THREE.Group();
       earthMesh.add(quakeGroup);
       
-      // Listen for window resizes.
       window.addEventListener('resize', onWindowResize, false);
     }
-
-    // Adjust camera and renderer on window resize.
+    
     function onWindowResize() {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
     }
     
-    // Convert latitude/longitude (in degrees) to a 3D vector on the sphere.
-    // 'height' is an optional offset so markers can sit just above the surface.
+    // Conversion function to convert (lat, lon) to a 3D vector on a sphere.
+    // This is a common formula for Three.js Earth mapping.
     function latLongToVector3(lat, lon, radius, height = 0) {
+      // Convert degrees to radians.
       const phi = (90 - lat) * (Math.PI / 180);
       const theta = (lon + 180) * (Math.PI / 180);
       
       const r = radius + height;
+      // The negative sign on x is typical for Three.js sphere mapping.
       const x = -r * Math.sin(phi) * Math.cos(theta);
-      const z = r * Math.sin(phi) * Math.sin(theta);
       const y = r * Math.cos(phi);
+      const z = r * Math.sin(phi) * Math.sin(theta);
       
       return new THREE.Vector3(x, y, z);
     }
     
-    // Fetch earthquake data from the USGS API and update quake markers.
+    // Fetch the latest earthquake data from USGS.
     function fetchEarthquakeData() {
-      // USGS query URL: limit=20, within given lat/lon bounds (continental U.S.),
-      // ordered by time (latest first).
       const queryUrl = "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson" +
                        "&limit=20" +
                        "&minlatitude=21.9838&maxlatitude=51.78144" +
@@ -110,21 +110,20 @@
         .catch(error => console.error("Error fetching earthquake data:", error));
     }
     
-    // Remove old markers and add new ones based on the fetched data.
+    // Update quake markers based on the fetched data.
     function updateQuakeMarkers(data) {
       // Remove any existing quake markers.
       while (quakeGroup.children.length) {
         quakeGroup.remove(quakeGroup.children[0]);
       }
       
-      // For each earthquake, create a marker.
+      // For each earthquake, create a red marker whose size is proportional to its magnitude.
       data.features.forEach(feature => {
         const mag = feature.properties.mag;
         const coords = feature.geometry.coordinates; // [longitude, latitude, depth]
-        const lon = coords[0];
-        const lat = coords[1];
+        const lon = coords[0], lat = coords[1];
         
-        // Marker size proportional to magnitude (with a minimum size).
+        // Determine marker size (with a minimum size).
         const markerSize = Math.max(0.05, mag * 0.1);
         const markerGeometry = new THREE.SphereGeometry(markerSize, 16, 16);
         const markerMaterial = new THREE.MeshBasicMaterial({
@@ -134,9 +133,9 @@
         });
         const markerMesh = new THREE.Mesh(markerGeometry, markerMaterial);
         
-        // Position the marker using the lat/long conversion.
-        // A small height offset (e.g., 0.1) ensures the marker sits above the surface.
-        markerMesh.position.copy(latLongToVector3(lat, lon, EARTH_RADIUS, 0.1));
+        // Convert lat/lon to a 3D position on the sphere.
+        // Here we use height=0 so the marker sits exactly on the Earth’s surface.
+        markerMesh.position.copy(latLongToVector3(lat, lon, EARTH_RADIUS, 0));
         
         quakeGroup.add(markerMesh);
       });
