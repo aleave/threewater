@@ -1,92 +1,103 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Dancing Beautiful Math</title>
-  <style>
-    body { margin: 0; overflow: hidden; background-color: #000; }
-  </style>
-</head>
-<body>
-  <!-- Load Three.js from CDN -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script>
-    let scene, camera, renderer, mesh, geometry, clock;
+let scene, camera, renderer, mesh, geometry, clock;
+let basePositions, vertexPhases, vertexFreqs;
 
-    init();
-    animate();
+init();
+animate();
 
-    function init() {
-      // Create the scene with a dark background.
-      scene = new THREE.Scene();
-      scene.background = new THREE.Color(0x000000);
+function init() {
+  // Create the scene and set a black background.
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x000000);
 
-      // Set up a perspective camera.
-      camera = new THREE.PerspectiveCamera(
-        75,
-        window.innerWidth / window.innerHeight,
-        0.1,
-        1000
-      );
-      camera.position.set(0, 5, 10);
-      camera.lookAt(0, 0, 0);
+  // Set up a perspective camera.
+  camera = new THREE.PerspectiveCamera(
+    75,
+    window.innerWidth / window.innerHeight,
+    0.1,
+    1000
+  );
+  camera.position.z = 10;
 
-      // Initialize the WebGL renderer.
-      renderer = new THREE.WebGLRenderer({ antialias: true });
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      document.body.appendChild(renderer.domElement);
+  // Initialize the WebGL renderer.
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  document.body.appendChild(renderer.domElement);
 
-      // Create a plane geometry that will act as our dynamic surface.
-      // Increase the segment count for a smoother, more fluid surface.
-      const segments = 100;
-      geometry = new THREE.PlaneBufferGeometry(10, 10, segments, segments);
+  // Create a smooth sphere geometry.
+  // Increasing the width and height segments makes the blob smoother.
+  geometry = new THREE.SphereBufferGeometry(3, 64, 64);
 
-      // Use a basic material in wireframe mode.
-      const material = new THREE.MeshBasicMaterial({
-        color: 0xffffff,
-        wireframe: true,
-      });
+  // Use a basic material in wireframe mode for a minimalist look.
+  const material = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    wireframe: true,
+  });
 
-      // Create the mesh and rotate it to lay horizontally.
-      mesh = new THREE.Mesh(geometry, material);
-      mesh.rotation.x = -Math.PI / 2;
-      scene.add(mesh);
+  // Create the mesh and add it to the scene.
+  mesh = new THREE.Mesh(geometry, material);
+  scene.add(mesh);
 
-      // Create a clock to keep track of time.
-      clock = new THREE.Clock();
+  // Store the original positions of each vertex so we know the base shape.
+  const positionAttribute = geometry.attributes.position;
+  const vertexCount = positionAttribute.count;
+  basePositions = new Float32Array(positionAttribute.array); // deep copy
 
-      // Adjust the scene when the window is resized.
-      window.addEventListener('resize', onWindowResize, false);
-    }
+  // For each vertex, assign a random phase and frequency to drive the pulsation.
+  vertexPhases = new Float32Array(vertexCount);
+  vertexFreqs = new Float32Array(vertexCount);
+  for (let i = 0; i < vertexCount; i++) {
+    vertexPhases[i] = Math.random() * Math.PI * 2;
+    vertexFreqs[i] = 0.5 + Math.random(); // frequencies between 0.5 and 1.5
+  }
 
-    function onWindowResize() {
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
-    }
+  // Create a clock to track elapsed time.
+  clock = new THREE.Clock();
 
-    function animate() {
-      requestAnimationFrame(animate);
-      const time = clock.getElapsedTime();
-      const positionAttribute = geometry.attributes.position;
+  // Adjust rendering on window resize.
+  window.addEventListener('resize', onWindowResize, false);
+}
 
-      // Loop through each vertex in the geometry and update its z-coordinate.
-      // This creates a dynamic wave effect based on time and the vertex's (x, y) position.
-      for (let i = 0; i < positionAttribute.count; i++) {
-        const x = positionAttribute.getX(i);
-        const y = positionAttribute.getY(i);
-        // Experiment with this math function to change the visual effect.
-        const wave = Math.sin((x + time) * 2) * Math.cos((y + time) * 2);
-        positionAttribute.setZ(i, wave);
-      }
-      positionAttribute.needsUpdate = true;
+function onWindowResize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
 
-      // Optionally, add a slight rotation to the entire mesh for an evolving perspective.
-      mesh.rotation.z += 0.001;
-      mesh.rotation.x += 0.0005;
+function animate() {
+  requestAnimationFrame(animate);
+  const time = clock.getElapsedTime();
 
-      renderer.render(scene, camera);
-    }
-  </script>
-</body>
-</html>
+  const positions = geometry.attributes.position.array;
+  const vertexCount = geometry.attributes.position.count;
+
+  // Update each vertex's position.
+  for (let i = 0; i < vertexCount; i++) {
+    const ix = i * 3;
+    const bx = basePositions[ix];
+    const by = basePositions[ix + 1];
+    const bz = basePositions[ix + 2];
+
+    // Calculate the original radius (distance from the center).
+    // For a sphere, this is constant but is useful if you change the base shape.
+    const originalRadius = Math.sqrt(bx * bx + by * by + bz * bz);
+
+    // Compute a displacement based on a sine wave with a random phase and frequency.
+    // The amplitude here (0.5) controls how much the blob pulsates.
+    const displacement = 0.5 * Math.sin(time * vertexFreqs[i] + vertexPhases[i]);
+
+    // The new radius is the original radius plus the computed displacement.
+    const newRadius = originalRadius + displacement;
+
+    // Normalize the original base position and scale it by the new radius.
+    const factor = newRadius / originalRadius;
+    positions[ix]     = bx * factor;
+    positions[ix + 1] = by * factor;
+    positions[ix + 2] = bz * factor;
+  }
+  geometry.attributes.position.needsUpdate = true;
+
+  // Optionally, rotate the whole blob for an additional dynamic effect.
+  mesh.rotation.y += 0.005;
+
+  renderer.render(scene, camera);
+}
