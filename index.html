@@ -176,7 +176,13 @@
         const markerSize = Math.max(0.05, mag * 0.1);
         
         const markerGeometry = new THREE.SphereGeometry(markerSize, 16, 16);
-        const markerMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.7 });
+        const markerMaterial = new THREE.MeshStandardMaterial({ 
+          color: 0xff0000, 
+          transparent: true, 
+          opacity: 0.7,
+          emissive: 0x550000,
+          emissiveIntensity: 0.5
+        });
         const markerMesh = new THREE.Mesh(markerGeometry, markerMaterial);
         markerMesh.position.copy(latLongToVector3(lat, lon, EARTH_RADIUS, 0));
 
@@ -208,10 +214,11 @@
       });
     }
 
-    // Highlight effect on hover
+    // Highlight effect using scale & opacity
     function highlightMarker(index, highlight) {
       if (quakeMarkers[index]) {
-        quakeMarkers[index].material.emissive = highlight ? new THREE.Color(0xffff00) : new THREE.Color(0x000000);
+        quakeMarkers[index].scale.setScalar(highlight ? 1.5 : 1);
+        quakeMarkers[index].material.opacity = highlight ? 1 : 0.7;
       }
     }
 
