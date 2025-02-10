@@ -2,13 +2,70 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Real-Time Global Earthquake Globe</title>
+  <title>Real-Time Earthquake Globe</title>
   <style>
-    body { margin: 0; overflow: hidden; background-color: #222; }
+    /* Fullscreen background */
+    body { 
+      margin: 0;
+      overflow: hidden;
+      background-color: #111;
+      display: flex;
+      color: #ddd;
+      font-family: Arial, sans-serif;
+    }
+
+    /* Globe container */
+    #globe-container {
+      flex-grow: 1;
+      height: 100vh;
+    }
+
+    /* Earthquake List Styling */
+    #quake-list {
+      width: 300px;
+      background: #000;
+      padding: 10px;
+      overflow-y: auto;
+      height: 100vh;
+      box-shadow: -2px 0px 5px rgba(255, 255, 255, 0.2);
+      border-left: 1px solid #333;
+    }
+
+    h2 {
+      font-size: 16px;
+      text-align: center;
+      color: #ff5555;
+      margin-bottom: 10px;
+      border-bottom: 1px solid #444;
+      padding-bottom: 5px;
+    }
+
+    .quake-entry {
+      padding: 5px;
+      margin: 5px 0;
+      font-size: 14px;
+      background: #222;
+      border-radius: 4px;
+      border-left: 4px solid #ff3333;
+    }
+
+    .magnitude {
+      color: #ff5555;
+      font-weight: bold;
+    }
   </style>
 </head>
 <body>
-  <!-- Load Three.js from a CDN -->
+  <!-- The 3D Globe -->
+  <div id="globe-container"></div>
+
+  <!-- Sidebar for Earthquake List -->
+  <div id="quake-list">
+    <h2>Latest Earthquakes</h2>
+    <div id="quake-entries">Loading...</div>
+  </div>
+
+  <!-- Load Three.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script>
     let scene, camera, renderer;
@@ -17,8 +74,8 @@
     
     init();
     animate();
-    fetchEarthquakeData(); // initial data fetch
-    setInterval(fetchEarthquakeData, 60000); // update every 60 seconds
+    fetchEarthquakeData(); // Initial fetch
+    setInterval(fetchEarthquakeData, 60000); // Update every 60 seconds
 
     function init() {
       // Create the scene.
@@ -35,8 +92,8 @@
       
       // Create the WebGL renderer.
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      document.body.appendChild(renderer.domElement);
+      renderer.setSize(window.innerWidth - 300, window.innerHeight);
+      document.getElementById("globe-container").appendChild(renderer.domElement);
       
       // Increase light intensities for a brighter scene.
       const ambientLight = new THREE.AmbientLight(0xffffff, 2.5);
@@ -45,13 +102,13 @@
       directionalLight.position.set(5, 3, 5);
       scene.add(directionalLight);
       
-      // Load an abstract Earth texture (showing boundaries, meridians, etc.).
+      // Load an abstract Earth texture.
       const textureLoader = new THREE.TextureLoader();
       const earthTexture = textureLoader.load(
         "https://upload.wikimedia.org/wikipedia/commons/thumb/8/80/World_map_-_low_resolution.svg/1200px-World_map_-_low_resolution.svg.png"
       );
       
-      // Create Earth geometry and a slightly translucent, emissive material.
+      // Create Earth geometry and material.
       const earthGeometry = new THREE.SphereGeometry(EARTH_RADIUS, 64, 64);
       const earthMaterial = new THREE.MeshPhongMaterial({
         map: earthTexture,
@@ -63,21 +120,21 @@
       earthMesh = new THREE.Mesh(earthGeometry, earthMaterial);
       scene.add(earthMesh);
       
-      // Create a group for quake markers and attach it to the Earth.
+      // Create a group for quake markers.
       quakeGroup = new THREE.Group();
       earthMesh.add(quakeGroup);
       
-      // Listen for window resize events.
+      // Handle window resizing.
       window.addEventListener('resize', onWindowResize, false);
     }
-    
+
     function onWindowResize() {
-      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.aspect = (window.innerWidth - 300) / window.innerHeight;
       camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setSize(window.innerWidth - 300, window.innerHeight);
     }
     
-    // Convert latitude/longitude (in degrees) to a 3D vector on the sphere.
+    // Convert latitude/longitude (in degrees) to a 3D position on a sphere.
     function latLongToVector3(lat, lon, radius, height = 0) {
       const phi = (90 - lat) * (Math.PI / 180);
       const theta = (lon + 180) * (Math.PI / 180);
@@ -89,7 +146,7 @@
       
       return new THREE.Vector3(x, y, z);
     }
-    
+
     // Fetch the latest 20 worldwide earthquakes from the USGS.
     function fetchEarthquakeData() {
       const queryUrl = "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson" +
@@ -97,21 +154,22 @@
       
       fetch(queryUrl)
         .then(response => response.json())
-        .then(data => updateQuakeMarkers(data))
+        .then(data => {
+          updateQuakeMarkers(data);
+          updateQuakeList(data);
+        })
         .catch(error => console.error("Error fetching earthquake data:", error));
     }
-    
-    // Update quake markers.
+
+    // Update quake markers on the globe.
     function updateQuakeMarkers(data) {
-      // Remove any existing quake markers.
       while (quakeGroup.children.length) {
         quakeGroup.remove(quakeGroup.children[0]);
       }
       
-      // For each earthquake, create a red marker.
       data.features.forEach(feature => {
         const mag = feature.properties.mag;
-        const coords = feature.geometry.coordinates; // [longitude, latitude, depth]
+        const coords = feature.geometry.coordinates; // [lon, lat, depth]
         const lon = coords[0], lat = coords[1];
         
         // Marker size proportional to magnitude (with a minimum size).
@@ -123,20 +181,33 @@
           opacity: 0.7
         });
         const markerMesh = new THREE.Mesh(markerGeometry, markerMaterial);
-        // Place the marker exactly on the Earth's surface.
         markerMesh.position.copy(latLongToVector3(lat, lon, EARTH_RADIUS, 0));
         
         quakeGroup.add(markerMesh);
+      });
+    }
+
+    // Update the earthquake list in the sidebar.
+    function updateQuakeList(data) {
+      const quakeEntries = document.getElementById("quake-entries");
+      quakeEntries.innerHTML = ""; // Clear previous list
+      
+      data.features.forEach(feature => {
+        const mag = feature.properties.mag.toFixed(1);
+        const place = feature.properties.place;
+        
+        const entry = document.createElement("div");
+        entry.className = "quake-entry";
+        entry.innerHTML = `<span class="magnitude">M${mag}</span> - ${place}`;
+        
+        quakeEntries.appendChild(entry);
       });
     }
     
     // Animation loop: slowly rotate the Earth.
     function animate() {
       requestAnimationFrame(animate);
-      
-      // Rotate the Earth on its Y-axis.
       earthMesh.rotation.y += 0.001;
-      
       renderer.render(scene, camera);
     }
   </script>
