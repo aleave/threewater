@@ -2,31 +2,29 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Real-Time Global Earthquake Globe</title>
+  <title>Real-Time Global Earthquake Globe with Labels</title>
   <style>
-    /* A slightly lighter dark background */
     body { margin: 0; overflow: hidden; background-color: #222; }
   </style>
 </head>
 <body>
   <!-- Load Three.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <!-- Load CSS2DRenderer for labels -->
+  <script src="https://threejs.org/examples/js/renderers/CSS2DRenderer.js"></script>
   <script>
-    let scene, camera, renderer;
+    let scene, camera, renderer, labelRenderer;
     let earthMesh, quakeGroup;
     const EARTH_RADIUS = 3;
     
     init();
     animate();
-    fetchEarthquakeData(); // initial fetch
-    // Update quake markers every 60 seconds
-    setInterval(fetchEarthquakeData, 60000);
+    fetchEarthquakeData(); // initial data fetch
+    setInterval(fetchEarthquakeData, 60000); // update every 60 seconds
 
     function init() {
-      // Create the scene.
+      // Create scene and camera.
       scene = new THREE.Scene();
-      
-      // Set up the perspective camera.
       camera = new THREE.PerspectiveCamera(
         75,
         window.innerWidth / window.innerHeight,
@@ -34,21 +32,28 @@
         1000
       );
       camera.position.set(0, 0, 10);
-      
-      // Create the renderer.
+
+      // Create WebGL renderer.
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
       renderer.setSize(window.innerWidth, window.innerHeight);
       document.body.appendChild(renderer.domElement);
       
-      // Increase light intensities for a brighter scene.
-      const ambientLight = new THREE.AmbientLight(0xffffff, 2.0);
+      // Create CSS2DRenderer for text labels.
+      labelRenderer = new THREE.CSS2DRenderer();
+      labelRenderer.setSize(window.innerWidth, window.innerHeight);
+      labelRenderer.domElement.style.position = 'absolute';
+      labelRenderer.domElement.style.top = '0';
+      labelRenderer.domElement.style.pointerEvents = 'none';
+      document.body.appendChild(labelRenderer.domElement);
+
+      // Increase lights for a brighter scene.
+      const ambientLight = new THREE.AmbientLight(0xffffff, 2.5);
       scene.add(ambientLight);
-      
-      const directionalLight = new THREE.DirectionalLight(0xffffff, 2.0);
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 2.5);
       directionalLight.position.set(5, 3, 5);
       scene.add(directionalLight);
       
-      // Load an abstract Earth texture (with boundaries, meridians, etc.)
+      // Load an abstract Earth texture (showing boundaries, meridians, etc.).
       const textureLoader = new THREE.TextureLoader();
       const earthTexture = textureLoader.load(
         "https://upload.wikimedia.org/wikipedia/commons/thumb/8/80/World_map_-_low_resolution.svg/1200px-World_map_-_low_resolution.svg.png"
@@ -60,8 +65,8 @@
         map: earthTexture,
         transparent: true,
         opacity: 0.8,
-        emissive: 0x333333,
-        emissiveIntensity: 1.0
+        emissive: 0x555555,
+        emissiveIntensity: 1.5
       });
       earthMesh = new THREE.Mesh(earthGeometry, earthMaterial);
       scene.add(earthMesh);
@@ -70,7 +75,6 @@
       quakeGroup = new THREE.Group();
       earthMesh.add(quakeGroup);
       
-      // Adjust scene on window resize.
       window.addEventListener('resize', onWindowResize, false);
     }
     
@@ -78,15 +82,15 @@
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
+      labelRenderer.setSize(window.innerWidth, window.innerHeight);
     }
     
-    // Convert latitude and longitude to a 3D position on the sphere.
+    // Convert latitude/longitude to a 3D vector on the sphere.
     function latLongToVector3(lat, lon, radius, height = 0) {
       const phi = (90 - lat) * (Math.PI / 180);
       const theta = (lon + 180) * (Math.PI / 180);
       
       const r = radius + height;
-      // The negative on x aligns the mapping with common Earth textures.
       const x = -r * Math.sin(phi) * Math.cos(theta);
       const y = r * Math.cos(phi);
       const z = r * Math.sin(phi) * Math.sin(theta);
@@ -94,33 +98,31 @@
       return new THREE.Vector3(x, y, z);
     }
     
-    // Fetch the latest 20 worldwide earthquakes from the USGS.
+    // Fetch the latest 20 worldwide earthquakes from USGS.
     function fetchEarthquakeData() {
       const queryUrl = "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson" +
                        "&limit=20&orderby=time";
       
       fetch(queryUrl)
         .then(response => response.json())
-        .then(data => {
-          updateQuakeMarkers(data);
-        })
+        .then(data => updateQuakeMarkers(data))
         .catch(error => console.error("Error fetching earthquake data:", error));
     }
     
-    // Update the quake markers based on the fetched data.
+    // Update quake markers and add labels.
     function updateQuakeMarkers(data) {
       // Remove any existing quake markers.
       while (quakeGroup.children.length) {
         quakeGroup.remove(quakeGroup.children[0]);
       }
       
-      // For each earthquake, create a marker.
+      // For each earthquake, create a red marker and attach a label.
       data.features.forEach(feature => {
         const mag = feature.properties.mag;
-        const coords = feature.geometry.coordinates; // [longitude, latitude, depth]
+        const coords = feature.geometry.coordinates; // [lon, lat, depth]
         const lon = coords[0], lat = coords[1];
         
-        // Size proportional to magnitude (with a minimum size).
+        // Marker size proportional to magnitude (with a minimum size).
         const markerSize = Math.max(0.05, mag * 0.1);
         const markerGeometry = new THREE.SphereGeometry(markerSize, 16, 16);
         const markerMaterial = new THREE.MeshBasicMaterial({
@@ -129,19 +131,34 @@
           opacity: 0.7
         });
         const markerMesh = new THREE.Mesh(markerGeometry, markerMaterial);
-        
-        // Place the marker exactly on the Earth's surface.
         markerMesh.position.copy(latLongToVector3(lat, lon, EARTH_RADIUS, 0));
+        
+        // Create a label for the quake location.
+        const labelDiv = document.createElement('div');
+        labelDiv.className = 'label';
+        labelDiv.textContent = feature.properties.place;
+        labelDiv.style.marginTop = '-1em';
+        labelDiv.style.color = 'white';
+        labelDiv.style.fontSize = '12px';
+        labelDiv.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+        labelDiv.style.padding = '2px 4px';
+        labelDiv.style.borderRadius = '4px';
+        
+        const label = new THREE.CSS2DObject(labelDiv);
+        // Position the label slightly above the marker.
+        label.position.set(0, markerSize + 0.1, 0);
+        markerMesh.add(label);
         
         quakeGroup.add(markerMesh);
       });
     }
     
-    // Animation loop: rotate the Earth and render the scene.
+    // Animation loop: slowly rotate the Earth and render both renderers.
     function animate() {
       requestAnimationFrame(animate);
       earthMesh.rotation.y += 0.001;
       renderer.render(scene, camera);
+      labelRenderer.render(scene, camera);
     }
   </script>
 </body>
